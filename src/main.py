@@ -1,4 +1,5 @@
 import argparse
+import ast
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,6 +14,7 @@ parser = argparse.ArgumentParser(description='Decentralized FL with configurable
 parser.add_argument('--num_clients', type=int, default=8, help='Total number of clients')
 parser.add_argument('--num_attackers', type=int, default=2, help='Number of attacker clients')
 parser.add_argument('--attackers', type=int, nargs='*', help='Specific attacker client IDs (overrides random)')
+parser.add_argument('--groups', type=str, help='Client groups as a Python list of lists, e.g. "[[1,3,5,7],[2,4,6,8]]"')
 args = parser.parse_args()
 
 # Set random seeds for reproducibility
@@ -41,7 +43,19 @@ INPUT_DIM = 28 * 28
 BATCH_SIZE = 128
 GLOBAL_EPOCHS = 5
 LEARNING_RATE = 0.01
-GROUPS = [list(range(1, D_NUM_CLIENTS//2+1)), list(range(D_NUM_CLIENTS//2+1, D_NUM_CLIENTS+1))]
+# Default groups: split first half and second half
+default_groups = [list(range(1, D_NUM_CLIENTS//2+1)), list(range(D_NUM_CLIENTS//2+1, D_NUM_CLIENTS+1))]
+# Allow override via CLI argument --groups
+
+# parse groups after args
+if args.groups:
+    try:
+        GROUPS = ast.literal_eval(args.groups)
+    except Exception as e:
+        print(f"Error parsing groups argument: {e}")
+        GROUPS = default_groups
+else:
+    GROUPS = default_groups
 
 # Load MNIST
 tf = transforms.ToTensor()
@@ -150,53 +164,68 @@ loader_avg = filter_test_by_dist(mnist_test, np.ones(10)/10)
 
 # Ensemble evaluation with tie-breaking
 
+# Ensemble evaluation with three-category outputs
 def ensemble_eval(models, loader):
-    total = correct = failures = 0
+    total = robust = succ_if_noattack = fail = 0
+    attacker_group_count = sum(getattr(m, 'is_affected', False) for m in models)
     for Xb, yb in loader:
         logits = torch.stack([m.eval()(Xb).detach() for m in models])  # (M,B,10)
         preds = torch.argmax(logits, dim=2).numpy()  # (M,B)
         for i in range(preds.shape[1]):
             votes = preds[:, i]
-            vals, counts = np.unique(votes, return_counts=True)
-            max_count = counts.max()
-            tied = vals[counts == max_count]
+            # non-affected votes count
+            non_votes = [votes[j] for j, m in enumerate(models) if not getattr(m, 'is_affected', False)]
+            if non_votes:
+                vals_n, cnts_n = np.unique(non_votes, return_counts=True)
+                sorted_cnts = np.sort(cnts_n)[::-1]
+                first_non = sorted_cnts[0]
+                second_non = sorted_cnts[1] if len(sorted_cnts) > 1 else 0
+            else:
+                first_non = second_non = 0
+            total += 1
+            # category 1: robust success under attack
+            if first_non > second_non + attacker_group_count:
+                robust += 1
+                continue
             # determine final vote
+            vals, counts = np.unique(votes, return_counts=True)
+            tied = vals[counts == counts.max()]
             if tied.size == 1:
                 final = tied[0]
             else:
-                # tie case
-                # check if any attacker voted among tied labels
                 attacker_votes = [votes[j] for j, m in enumerate(models) if getattr(m, 'is_affected', False)]
                 if any(v in tied for v in attacker_votes):
-                    failures += 1
+                    pass  # attack influence already considered
                 final = random.choice(tied.tolist())
-            total += 1
+            # category 2/3 based on final vs true label
             if final == yb[i].item():
-                correct += 1
-    return correct/total, failures/total
+                succ_if_noattack += 1
+            else:
+                fail += 1
+    return robust/total, succ_if_noattack/total, fail/total
 
-acc1, fail1 = ensemble_eval(selected_models, loader1)
-acc2, fail2 = ensemble_eval(selected_models, loader2)
-acc_avg, fail_avg = ensemble_eval(selected_models, loader_avg)
-print(f"Dist1 -> Acc={acc1:.3f}, Fail={fail1:.3f}")
-print(f"Dist2 -> Acc={acc2:.3f}, Fail={fail2:.3f}")
-print(f"Avg   -> Acc={acc_avg:.3f}, Fail={fail_avg:.3f}")
+# Run evaluations
+res1 = ensemble_eval(selected_models, loader1)
+res2 = ensemble_eval(selected_models, loader2)
+res_avg = ensemble_eval(selected_models, loader_avg)
+print(f"Dist1 -> Robust={res1[0]:.3f}, Succ={res1[1]:.3f}, Fail={res1[2]:.3f}")
+print(f"Dist2 -> Robust={res2[0]:.3f}, Succ={res2[1]:.3f}, Fail={res2[2]:.3f}")
+print(f"Avg   -> Robust={res_avg[0]:.3f}, Succ={res_avg[1]:.3f}, Fail={res_avg[2]:.3f}")
 
-# Plot stacked graph
+# Plot stacked area of three categories
 labels = ['Dist1', 'Dist2', 'Avg']
-accs = np.array([acc1, acc2, acc_avg])
-fails = np.array([fail1, fail2, fail_avg])
+robusts = np.array([res1[0], res2[0], res_avg[0]])
+succs = np.array([res1[1], res2[1], res_avg[1]])
+fails = np.array([res1[2], res2[2], res_avg[2]])
 x = np.arange(len(labels))
 
 fig, ax = plt.subplots()
-ax.stackplot(x, accs, fails, labels=['Accuracy', 'Failure Rate'], alpha=0.6)
-ax.plot(x, accs, marker='o')
-ax.plot(x, accs + fails, marker='o')
+ax.stackplot(x, robusts, succs, fails, labels=['Robust Success','Success','Failure'], alpha=0.6)
 ax.set_xticks(x)
 ax.set_xticklabels(labels)
 ax.set_ylabel('Rate')
 ax.legend()
-plt.title('Accuracy with Failure Rate Stacked')
+plt.title('untarget backdoor attack')
 plt.tight_layout()
-plt.savefig('accuracy_failure_stacked.png')
+plt.savefig('untarget_backdoor_attack.png')
 plt.show()
