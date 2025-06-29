@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Subset
-from torchvision import datasets, transforms
+from torchvision import datasets, transforms # type: ignore[import]
 import matplotlib.pyplot as plt
 import random
 import ast
@@ -98,7 +98,7 @@ results = {}
 
 for target_id, target_client in clients.items():
     # 1) 全グループからランダムに１クライアントずつ抽出
-    ensemble_clients = []
+    ensemble_clients: list[Client] = []
     for _, group in groups.items():
         ensemble_clients.append(group.select_model(target_id))
     # 2) 対象クライアントのテストローダーを使う

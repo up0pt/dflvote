@@ -1,6 +1,7 @@
 import unittest
 import torch
 from torch.utils.data import DataLoader
+from torchvision import datasets, transforms # type: ignore[import]
 from client import Client
 from group import Group
 from utils import create_model, split_indices, filter_test, ensemble_eval
@@ -30,7 +31,6 @@ class TestComponents(unittest.TestCase):
         self.assertTrue(self.client.is_affected)
 
     def test_split_and_filter(self):
-        from torchvision import datasets, transforms
         tf = transforms.ToTensor()
         ds = datasets.MNIST('.', train=True, download=True, transform=tf)
         pi = [0.1]*10

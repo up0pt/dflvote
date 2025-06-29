@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 import random
+from client import Client
 
 # Constants for default values
 SAMPLES_PER_CLIENT = 6000
@@ -54,7 +55,7 @@ def filter_test(ds, pi, n=2000):
 
 # Ensemble evaluation
 
-def ensemble_eval(clients, loader):
+def ensemble_eval(clients: list[Client], loader: DataLoader):
     total = robust = succ = fail = 0
     agc = sum(c.is_affected for c in clients)
     for Xb, yb in tqdm(loader):
