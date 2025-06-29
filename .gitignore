@@ -16,3 +16,4 @@ MNIST/
 *.pth
 
 .mypy_cache
+.pytest_cache

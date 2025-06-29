@@ -1,16 +1,23 @@
 import argparse
+import ast
+import json
+import logging
+import os
+import random
+import pathlib
+from datetime import datetime
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 from torch.utils.data import DataLoader, Subset
-from torchvision import datasets, transforms # type: ignore[import]
-import matplotlib.pyplot as plt
-import random
-import ast
+from torchvision import datasets, transforms  # type: ignore[import]
 
 from client import Client
 from group import Group
 from utils import split_indices, filter_test, ensemble_eval
-import seaborn as sns
 
 # Command-line parsing
 parser = argparse.ArgumentParser()
@@ -21,6 +28,8 @@ parser.add_argument('--groups', type=str)
 parser.add_argument('--dists', type=str)
 parser.add_argument('--is_targeted', type=bool, default=False)
 parser.add_argument('--dataset', choices=["MNIST", 'CIFAR10'], default="MNIST")
+parser.add_argument('--epoch', type=int, default=5)
+parser.add_argument('--lr', type=float, default=0.001)
 args = parser.parse_args()
 
 # Reproducibility
@@ -50,6 +59,16 @@ if args.groups:
         GROUP_IDS = default_groups
 else:
     GROUP_IDS = default_groups
+
+# mkdir for data store
+exp_name = f"{args.dataset}_clients{args.num_clients}_attackers{args.num_attackers}_targeted{args.is_targeted}_groups{GROUP_IDS}"
+now = datetime.now().strftime("%Y%m%d_%H%M%S")
+exp_dir = Path("experiments") / f"{exp_name}_{now}"
+exp_dir.mkdir(parents=True, exist_ok=True)
+models_dir = exp_dir / "models"
+models_dir.mkdir(parents=True, exist_ok=True)
+print(f"Experiment directory created: {exp_dir}")
+
 
 # Dirichlet splits
 # TODO: vary alpha between groups
@@ -85,7 +104,7 @@ print(f"Attackers: {attackers}")
 groups = {}
 for gid, gids in enumerate(GROUP_IDS):
     grp_clients = [clients[i] for i in gids]
-    grp = Group(gid, grp_clients)
+    grp = Group(gid, grp_clients, exp_dir)
     for client in grp_clients:
         client.set_group_id(gid)
     groups[gid] = grp
@@ -93,7 +112,35 @@ for gid, gids in enumerate(GROUP_IDS):
 # Train and assign
 for gid, grp in groups.items():
     print(f"Training Group {gid}")
-    grp.train(5, 0.001)
+    grp.train(args.epoch, args.lr)
+
+# Set up logger
+log_file = exp_dir / "experiment.log"
+logging.basicConfig(
+    filename=str(log_file),
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+logger = logging.getLogger()
+
+# Save important experiment info
+info = {
+    "exp_dir": str(exp_dir),
+    "dataset": args.dataset,
+    "num_clients": args.num_clients,
+    "num_attackers": args.num_attackers,
+    "attackers": attackers if 'attackers' in locals() else None,
+    "is_targeted": args.is_targeted,
+    "groups": GROUP_IDS,
+    "distribution": [dist.tolist() for dist in distribution],
+    "epoch": args.epoch,
+    "lr": args.lr
+}
+info_file = exp_dir / "experiment_info.json"
+with open(info_file, "w") as f:
+    json.dump(info, f, indent=2)
+
+logger.info(f"Experiment info saved to {info_file}")
 
 # Select and evaluate
 test_loaders = [filter_test(test_ds, dist) for dist in distribution]
@@ -128,11 +175,12 @@ ax.bar(x, suc, bottom=rob, label='Success', alpha=0.6)
 ax.bar(x, fai, bottom=np.array(rob)+np.array(suc), label='Fail', alpha=0.6)
 ax.set_xticks(x)
 ax.set_xticklabels(labels)
+ax.grid(True)
 ax.legend()
 plt.title('target backdoor attack')
 plt.tight_layout()
 if args.is_targeted == False:
-    plt.savefig('target_backdoor_attack.png')
+    plt.savefig(exp_dir / 'target_backdoor_attack.png')
     plt.show()
 
 # Plot Dirichlet distributions for each client as a heatmap
@@ -144,5 +192,5 @@ plt.xlabel('Class')
 plt.ylabel('Client')
 plt.title('Dirichlet Distribution per Client (Heatmap)')
 plt.tight_layout()
-plt.savefig('dirichlet_distributions_heatmap.png')
+plt.savefig(exp_dir / 'dirichlet_distributions_heatmap.png')
 plt.show()
