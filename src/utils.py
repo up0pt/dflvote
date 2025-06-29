@@ -7,6 +7,7 @@ from client import Client
 
 # Constants for default values
 SAMPLES_PER_CLIENT = 6000
+LABEL_NUM = 10
 
 # CNN builder
 import torch.nn as nn
@@ -21,7 +22,7 @@ def split_indices(ds, pi, n=SAMPLES_PER_CLIENT):
         labels_list = list(ds.targets)
     labels = np.array(labels_list)
     idx = []
-    for k in range(10):
+    for k in range(LABEL_NUM):
         k_idx = np.where(labels == k)[0]
         n_k = int(pi[k] * n)
         sample = np.random.choice(k_idx, n_k, replace=(n_k > len(k_idx)))
@@ -56,11 +57,13 @@ def filter_test(ds, pi, n=2000):
 # Ensemble evaluation
 
 def ensemble_eval(clients: list[Client], loader: DataLoader):
+    if not clients:
+        raise AssertionError("clients must be a list and have item")
     total = robust = succ = fail = 0
     agc = sum(c.is_affected for c in clients)
     for Xb, yb in tqdm(loader):
-        logits = torch.stack([c.model.eval()(Xb).detach() for c in clients])
-        preds = torch.argmax(logits, dim=2).numpy()
+        logits = torch.stack([c.model.eval()(Xb).detach() for c in clients]) # num_clients * batch_size * num_label
+        preds = torch.argmax(logits, dim=2).numpy() # num_clients * batch_size
         print(preds)
         for i in range(preds.shape[1]):
             votes = preds[:, i]
@@ -71,7 +74,9 @@ def ensemble_eval(clients: list[Client], loader: DataLoader):
             vals, cts = np.unique(non, return_counts=True)
             tied = vals[cts == cts.max()]
             sorted_cts = np.sort(cts)[::-1]
-            if yb[i].item not in tied:
+            if yb[i].item() not in tied:
+                print(tied)
+                print(yb[i].item())
                 fail += 1
                 continue
             elif sorted_cts[0] > (sorted_cts[1] if len(sorted_cts) > 1 else 0) + agc:

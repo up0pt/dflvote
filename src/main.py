@@ -27,6 +27,10 @@ np.random.seed(0);
 torch.manual_seed(0); 
 random.seed(0)
 
+# Device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", device)
+
 # Data preparation
 match args.dataset:
     case "MNIST":
@@ -48,7 +52,7 @@ else:
 
 # Dirichlet splits
 # TODO: vary alpha between groups
-alpha = [0.5]*10
+alpha = [5]*10
 # Setup distribution
 default_distribution = [np.random.dirichlet(alpha)]* (args.num_clients//2) + [np.random.dirichlet(alpha)] * (args.num_clients - args.num_clients//2)
 if args.dists:
@@ -88,7 +92,7 @@ for gid, gids in enumerate(GROUP_IDS):
 # Train and assign
 for gid, grp in groups.items():
     print(f"Training Group {gid}")
-    grp.train(5, 0.01)
+    grp.train(5, 0.001)
 
 # Select and evaluate
 test_loaders = [filter_test(test_ds, dist) for dist in distribution]
@@ -109,16 +113,21 @@ for target_id, target_client in clients.items():
     results[target_id] = (robust, success, failure)
 
 
-labels = [f'Dist {i}' for i in range(1, args.num_clients+1)]+['Avg']
-rob, suc, fai = zip(*results)
+labels = [f'Dist {i}' for i in range(1, args.num_clients+1)]
+ordered = [results[k] for k in sorted(results.keys())]
+
+# 2) 各リストに分解
+rob, suc, fai = zip(*ordered)
 
 # Plot
-x = range(len(GROUP_IDS)+1)
+x = range(args.num_clients)
 fig, ax = plt.subplots()
 ax.stackplot(x, rob, suc, fai, labels=['Robust','Success','Fail'], alpha=0.6)
-ax.set_xticks(x); ax.set_xticklabels(labels)
-ax.legend(); plt.title('untarget backdoor attack')
+ax.set_xticks(x)
+ax.set_xticklabels(labels)
+ax.legend()
+plt.title('target backdoor attack')
 plt.tight_layout()
 if args.is_targeted == False:
-    plt.savefig('untarget_backdoor_attack.png')
+    plt.savefig('target_backdoor_attack.png')
     plt.show()
