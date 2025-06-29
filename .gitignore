@@ -12,6 +12,9 @@ wheels/
 # Dataset
 MNIST/
 
+# Experiment Data
+experiments
+
 # Model
 *.pth
 

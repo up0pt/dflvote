@@ -4,9 +4,10 @@ from torch.utils.data import DataLoader
 import random
 
 class Client:
-    def __init__(self, cid: int, loader: DataLoader):
+    def __init__(self, cid: int, train_loader: DataLoader, valid_loader: DataLoader):
         self.id = cid
-        self.loader = loader
+        self.train_loader = train_loader
+        self.valid_loader = valid_loader
         self.model = create_model()
         self.is_mal: bool = False
         self.is_affected: bool = False

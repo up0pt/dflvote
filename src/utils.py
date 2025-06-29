@@ -79,7 +79,7 @@ def ensemble_eval(
         c.model.to(dev)
         c.model.eval()
 
-    total = robust = succ = fail = 0.0
+    total = robust = succ = tie = fail = 0.0
     agc = sum(c.is_affected for c in clients)
 
     for Xb, yb in tqdm(loader):
@@ -103,11 +103,17 @@ def ensemble_eval(
             sorted_cts = np.sort(cts)[::-1]
 
             true_label = yb[i].item()
+            print(tied)
             if true_label not in tied:
                 fail += 1
-            elif sorted_cts[0] > (sorted_cts[1] if len(sorted_cts) > 1 else 0) + agc:
-                robust += 1.0 / tied.size
-            else:
+            elif sorted_cts[0] > (sorted_cts[1] if len(sorted_cts) > 1 else 0) + agc and true_label == tied[0]:
+                robust += 1
+            elif sorted_cts[0] > (sorted_cts[1] if len(sorted_cts) > 1 else 0) and true_label == tied[0]:
                 succ += 1
+            elif true_label in tied:
+                # equals else
+                tie += 1
+            else:
+                raise AssertionError('ensamble logic has unpredicted conditional branch')
 
-    return robust/total, succ/total, fail/total
+    return robust/total, succ/total, tie/total, fail/total

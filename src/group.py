@@ -3,8 +3,10 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import random
+import logging
 from typing import Literal
 from pathlib import Path
+from torch.utils.data import DataLoader
 
 from client import Client
 
@@ -23,37 +25,83 @@ class Group:
         for client in self.clients:
             client.set_affected(self.has_mal)
 
-    def train(self, epochs: int, lr: float):
-        # TODO: do full mesh dfl (now star or CFL)
-        # Set device
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Using device: {device}")
+    def train(
+        self,
+        epochs: int,
+        lr: float
+    ) -> None:
+        # Setup logging
+        log_path = self.dir_path / 'train.log'
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s %(levelname)s:%(message)s',
+            handlers=[
+                logging.FileHandler(log_path),
+                logging.StreamHandler()
+            ]
+        )
 
-        # Move all client models to the chosen device
+        # Determine device
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        logging.info(f"Using device: {device}")
+
+        # Move all client models to device
         for c in self.clients:
             c.model.to(device)
 
-        for _ in range(epochs):
-            # local training
+        for epoch in range(1, epochs + 1):
+            logging.info(f"Epoch {epoch}/{epochs} - Start training")
+            # Local training
             for c in self.clients:
-                optimizer = optim.SGD(c.model.parameters(), lr=lr)
                 c.model.train()
-                for Xb, yb in c.loader:
-                    # Move batch to device
+                optimizer = optim.SGD(c.model.parameters(), lr=lr)
+                for Xb, yb in c.train_loader:
                     Xb = Xb.to(device, non_blocking=True)
                     yb = yb.to(device, non_blocking=True)
+
                     optimizer.zero_grad()
                     loss = nn.CrossEntropyLoss()(c.model(Xb), yb)
                     loss.backward()
                     optimizer.step()
-            # aggregate
-            avg_dict = {
-                k: torch.mean(torch.stack([c.model.state_dict()[k].float() for c in self.clients]), dim=0)
-                for k in self.clients[0].model.state_dict()
-            }
+                    
+            # Validation
+            logging.info(f"Epoch {epoch}/{epochs} - Start validation")
+            self.clients[0].model.eval()
+            correct = 0
+            total = 0
+            with torch.no_grad():
+                for Xv, yv in c.valid_loader:
+                    Xv = Xv.to(device, non_blocking=True)
+                    yv = yv.to(device, non_blocking=True)
+                    outputs = self.clients[0].model(Xv)
+                    preds = outputs.argmax(dim=1)
+                    correct += (preds == yv).sum().item()
+                    total += yv.size(0)
+            val_acc = correct / total if total > 0 else 0.0
+            logging.info(f"Epoch {epoch}/{epochs} - Validation Accuracy: {val_acc:.4f}")
+
+            # Aggregate: average states
+            state_dicts = [c.model.state_dict() for c in self.clients]
+            avg_dict = {}
+            for key in state_dicts[0].keys():
+                stacked = torch.stack(
+                    [sd[key].float().to(device) for sd in state_dicts],
+                    dim=0
+                )
+                avg_dict[key] = stacked.mean(dim=0)
+
+            # Update client models with averaged parameters
             for c in self.clients:
                 c.model.load_state_dict(avg_dict)
-        torch.save(avg_dict, self.dir_path / "models" / f"group_{self.id}_model.pth")
+
+            
+        # Save final model to CPU
+        save_models_dir = self.dir_path / 'models'
+        save_models_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_models_dir / f"group_{self.id}_model.pth"
+        save_dict = {k: v.cpu() for k, v in avg_dict.items()}
+        torch.save(save_dict, save_path)
+        logging.info(f"Saved final model at {save_path}")
 
     def select_model(self, voted_at_id: int):
         match self.choose_vote_model:
