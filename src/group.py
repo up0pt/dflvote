@@ -53,7 +53,7 @@ class Group:
             }
             for c in self.clients:
                 c.model.load_state_dict(avg_dict)
-        torch.save(avg_dict, self.dir_path / "group_{self.id}_model.pth")
+        torch.save(avg_dict, self.dir_path / "models" / f"group_{self.id}_model.pth")
 
     def select_model(self, voted_at_id: int):
         match self.choose_vote_model:
