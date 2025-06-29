@@ -9,7 +9,7 @@
 
 
 
-PROJECT_ROOT=/home/members/nakadam/backdoor
+PROJECT_ROOT=/home/members/nakadam/dflvote
 
 echo "Running on node: $(hostname)"
 echo "In directory: $(pwd)"
@@ -34,7 +34,6 @@ datasets=("MNIST")
 epochs=(40)
 alpha=(0.1 1 10 100)
 lrs=(0.001)
-seeds=(123)
 
 # attackers_arr, dists_arr, is_targeted_arr が未定義なので、仮に定義します
 # attackers_arr=("")  # 必要に応じて値を設定
@@ -53,18 +52,14 @@ do
         do
           for lr in "${lrs[@]}"
           do
-            for seed in "${seeds[@]}"
-            do
-                echo ">>> num_clients=$num_clients, num_attackers=$num_attackers, groups=$groups, dataset=$dataset, epoch=$epoch, lr=$lr, seed=$seed"
-                uv run src/main.py \
-                    --num_clients "$num_clients" \
-                    --num_attackers "$num_attackers" \
-                    --groups "$groups" \
-                    --dataset "$dataset" \
-                    --epoch "$epoch" \
-                    --lr "$lr" \
-                    --seed "$seed"
-            done
+            echo ">>> num_clients=$num_clients, num_attackers=$num_attackers, groups=$groups, dataset=$dataset, epoch=$epoch, lr=$lr"
+            uv run src/main.py \
+                --num_clients "$num_clients" \
+                --num_attackers "$num_attackers" \
+                --groups "$groups" \
+                --dataset "$dataset" \
+                --epoch "$epoch" \
+                --lr "$lr"
           done
         done
       done
