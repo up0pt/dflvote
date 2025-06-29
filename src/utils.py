@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
+from typing import Literal
 import random
 from client import Client
 
@@ -56,32 +57,57 @@ def filter_test(ds, pi, n=2000):
 
 # Ensemble evaluation
 
-def ensemble_eval(clients: list[Client], loader: DataLoader):
+
+def ensemble_eval(
+    clients: list[Client],
+    loader: DataLoader,
+    device: Literal['cuda', 'cpu'] = 'cuda'
+) -> tuple[float, float, float]:
+    # Ensure clients list is not empty
     if not clients:
-        raise AssertionError("clients must be a list and have item")
-    total = robust = succ = fail = 0
+        raise AssertionError("clients must be a list and have at least one Client")
+
+    # Determine device
+    if device == 'cuda' and not torch.cuda.is_available():
+        print("CUDA unavailable, falling back to CPU")
+        device = 'cpu'
+    dev = torch.device(device)
+    print(f"Evaluating on device: {dev}")
+
+    # Move models to device
+    for c in clients:
+        c.model.to(dev)
+        c.model.eval()
+
+    total = robust = succ = fail = 0.0
     agc = sum(c.is_affected for c in clients)
+
     for Xb, yb in tqdm(loader):
-        logits = torch.stack([c.model.eval()(Xb).detach() for c in clients]) # num_clients * batch_size * num_label
-        preds = torch.argmax(logits, dim=2).numpy() # num_clients * batch_size
-        print(preds)
+        # Transfer batch to device
+        Xb = Xb.to(dev, non_blocking=True)
+        yb = yb.to(dev, non_blocking=True)
+
+        # Compute logits per client
+        logits = torch.stack([c.model(Xb).detach() for c in clients], dim=0)
+        preds = torch.argmax(logits, dim=2).cpu().numpy()  # shape: num_clients x batch_size
+
         for i in range(preds.shape[1]):
             votes = preds[:, i]
-            non = [votes[j] for j, c in enumerate(clients) if not c.is_affected]
+            non_vals = [votes[j] for j, c in enumerate(clients) if not c.is_affected]
             total += 1
-            if not non:
-                assert NotImplementedError('all clients are affected')
-            vals, cts = np.unique(non, return_counts=True)
+            if not non_vals:
+                raise NotImplementedError('All clients are affected')
+
+            vals, cts = np.unique(non_vals, return_counts=True)
             tied = vals[cts == cts.max()]
             sorted_cts = np.sort(cts)[::-1]
-            if yb[i].item() not in tied:
-                print(tied)
-                print(yb[i].item())
+
+            true_label = yb[i].item()
+            if true_label not in tied:
                 fail += 1
-                continue
             elif sorted_cts[0] > (sorted_cts[1] if len(sorted_cts) > 1 else 0) + agc:
-                robust += 1.0/tied.size
-                continue
-            else: 
+                robust += 1.0 / tied.size
+            else:
                 succ += 1
+
     return robust/total, succ/total, fail/total

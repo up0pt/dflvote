@@ -10,6 +10,7 @@ import ast
 from client import Client
 from group import Group
 from utils import split_indices, filter_test, ensemble_eval
+import seaborn as sns
 
 # Command-line parsing
 parser = argparse.ArgumentParser()
@@ -122,7 +123,9 @@ rob, suc, fai = zip(*ordered)
 # Plot
 x = range(args.num_clients)
 fig, ax = plt.subplots()
-ax.stackplot(x, rob, suc, fai, labels=['Robust','Success','Fail'], alpha=0.6)
+ax.bar(x, rob, label='Robust', alpha=0.6)
+ax.bar(x, suc, bottom=rob, label='Success', alpha=0.6)
+ax.bar(x, fai, bottom=np.array(rob)+np.array(suc), label='Fail', alpha=0.6)
 ax.set_xticks(x)
 ax.set_xticklabels(labels)
 ax.legend()
@@ -131,3 +134,15 @@ plt.tight_layout()
 if args.is_targeted == False:
     plt.savefig('target_backdoor_attack.png')
     plt.show()
+
+# Plot Dirichlet distributions for each client as a heatmap
+
+dist_matrix = np.stack(distribution)  # shape: (num_clients, num_classes)
+plt.figure(figsize=(10, 6))
+sns.heatmap(dist_matrix, annot=True, cmap="viridis", cbar=True, xticklabels=[f'Class {i}' for i in range(10)], yticklabels=[f'Client {i}' for i in range(args.num_clients)])
+plt.xlabel('Class')
+plt.ylabel('Client')
+plt.title('Dirichlet Distribution per Client (Heatmap)')
+plt.tight_layout()
+plt.savefig('dirichlet_distributions_heatmap.png')
+plt.show()
