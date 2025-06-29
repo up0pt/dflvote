@@ -2,9 +2,9 @@ import unittest
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms # type: ignore[import]
-from client import Client
+from client import Client, create_model
 from group import Group
-from utils import create_model, split_indices, filter_test, ensemble_eval
+from utils import split_indices, filter_test, ensemble_eval
 
 class TestComponents(unittest.TestCase):
     def setUp(self):
@@ -27,7 +27,6 @@ class TestComponents(unittest.TestCase):
         self.client.is_mal = True
         self.group.compute_has_mal()
         self.assertTrue(self.group.has_mal)
-        self.group.assign_affected()
         self.assertTrue(self.client.is_affected)
 
     def test_split_and_filter(self):

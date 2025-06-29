@@ -16,7 +16,7 @@ class Group:
     def compute_has_mal(self):
         self.has_mal = any(c.is_mal for c in self.clients)
         for client in self.clients:
-            client.set_affected = self.has_mal
+            client.set_affected(self.has_mal)
 
     def train(self, epochs: int, lr: float):
         # TODO: do full mesh dfl (now star or CFL)

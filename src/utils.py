@@ -11,20 +11,15 @@ SAMPLES_PER_CLIENT = 6000
 # CNN builder
 import torch.nn as nn
 
-def create_model():
-    return nn.Sequential(
-        nn.Conv2d(1, 32, 3, 1, 1), nn.ReLU(),
-        nn.Conv2d(32, 64, 3, 1, 1), nn.ReLU(),
-        nn.MaxPool2d(2), nn.Dropout(0.25),
-        nn.Flatten(),
-        nn.Linear(64 * 14 * 14, 128), nn.ReLU(), nn.Dropout(0.5),
-        nn.Linear(128, 10)
-    )
-
 # Data splitting
 
 def split_indices(ds, pi, n=SAMPLES_PER_CLIENT):
-    labels = np.array(ds.targets)
+    # Avoid Error: Convert ds.targets to a list and then to a numpy array, whether it's a Tensor or a list
+    if hasattr(ds.targets, "tolist"):
+        labels_list = ds.targets.tolist()
+    else:
+        labels_list = list(ds.targets)
+    labels = np.array(labels_list)
     idx = []
     for k in range(10):
         k_idx = np.where(labels == k)[0]
@@ -41,7 +36,12 @@ def split_indices(ds, pi, n=SAMPLES_PER_CLIENT):
 # Test filtering
 
 def filter_test(ds, pi, n=2000):
-    labels = np.array(ds.targets)
+    # Avoid Error: Convert ds.targets to a list and then to a numpy array, whether it's a Tensor or a list
+    if hasattr(ds.targets, "tolist"):
+        labels_list = ds.targets.tolist()
+    else:
+        labels_list = list(ds.targets)
+    labels = np.array(labels_list)
     idx = []
     for k in range(10):
         k_idx = np.where(labels == k)[0]
@@ -65,15 +65,18 @@ def ensemble_eval(clients: list[Client], loader: DataLoader):
         for i in range(preds.shape[1]):
             votes = preds[:, i]
             non = [votes[j] for j, c in enumerate(clients) if not c.is_affected]
-            if non:
-                vals, cts = np.unique(non, return_counts=True)
-                sorted_cts = np.sort(cts)[::-1]
-                if sorted_cts[0] > (sorted_cts[1] if len(sorted_cts) > 1 else 0) + agc:
-                    robust += 1; total += 1; continue
-            vals, cts = np.unique(votes, return_counts=True)
-            tied = vals[cts == cts.max()]
-            final = tied[0] if tied.size == 1 else random.choice(tied.tolist())
             total += 1
-            if final == yb[i].item(): succ += 1
-            else: fail += 1
+            if not non:
+                assert NotImplementedError('all clients are affected')
+            vals, cts = np.unique(non, return_counts=True)
+            tied = vals[cts == cts.max()]
+            sorted_cts = np.sort(cts)[::-1]
+            if yb[i].item not in tied:
+                fail += 1
+                continue
+            elif sorted_cts[0] > (sorted_cts[1] if len(sorted_cts) > 1 else 0) + agc:
+                robust += 1.0/tied.size
+                continue
+            else: 
+                succ += 1
     return robust/total, succ/total, fail/total
