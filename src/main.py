@@ -31,6 +31,7 @@ parser.add_argument('--dataset', choices=["MNIST", 'CIFAR10'], default="MNIST")
 parser.add_argument('--epoch', type=int, default=15)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--alpha', type=float, default=10)
+parser.add_argument('--num_train_data', type=int, default=6000)
 args = parser.parse_args()
 
 # Reproducibility
@@ -112,8 +113,8 @@ clients = {}
 # クライアント生成ループ
 for i in range(0, args.num_clients):
     pi = distribution[i]  # 属するグループに対応した分布
-    inds_train = split_indices(train_ds, pi)
-    inds_valid = split_indices(valid_ds, pi)
+    inds_train = split_indices(train_ds, pi, args.num_train_data)
+    inds_valid = split_indices(valid_ds, pi, args.num_train_data)
     train_loader = DataLoader(Subset(train_ds, inds_train), batch_size=128, shuffle=True)
     valid_loader = DataLoader(Subset(valid_ds, inds_valid), batch_size=128, shuffle=True)
     clients[i] = Client(i, train_loader, valid_loader)
@@ -229,6 +230,7 @@ info = {
     "distribution": [dist.tolist() for dist in distribution],
     "epoch": args.epoch,
     "lr": args.lr,
+    "num_train_data": args.num_train_data,
     "rob": rob,
     "suc": suc,
     "tie": tie,
