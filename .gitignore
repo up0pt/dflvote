@@ -14,6 +14,8 @@ MNIST/
 
 # Experiment Data
 experiments
+*.out
+*.err
 
 # Model
 *.pth

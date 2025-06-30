@@ -177,6 +177,8 @@ ax.bar(x, tie, bottom=np.array(rob) + np.array(suc), label='Tie wo Attack', alph
 ax.bar(x, fai, bottom=np.array(rob) + np.array(suc) + np.array(tie), label='Fail wo Attack', alpha=0.6)
 ax.set_xticks(x)
 ax.set_xticklabels(labels)
+# rotate labels 90° so they’re vertical
+plt.setp(ax.get_xticklabels(), rotation=90, ha='center')
 ax.grid(True)
 ax.legend()
 plt.title('target backdoor attack')
