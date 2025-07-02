@@ -49,6 +49,7 @@ class Group:
         for c in self.clients:
             c.model.to(device)
 
+        early_stopping = EarlyStopping()
         for epoch in range(1, epochs + 1):
             logging.info(f"Epoch {epoch}/{epochs} - Start training")
             # Local training
@@ -80,6 +81,10 @@ class Group:
             val_acc = correct / total if total > 0 else 0.0
             logging.info(f"Epoch {epoch}/{epochs} - Validation Accuracy: {val_acc:.4f}")
 
+            early_stopping(val_acc)
+            if early_stopping.early_stop:
+                print(f"Early stopping at epoch {epoch+1}")
+                break
             # Aggregate: average states
             state_dicts = [c.model.state_dict() for c in self.clients]
             avg_dict = {}
@@ -109,3 +114,27 @@ class Group:
                 return random.choice(self.clients)
             case other:
                 raise ValueError("Group has not implemented voting clients selection.")
+
+class EarlyStopping:
+    def __init__(self, patience=10, delta=1e-4):
+        self.patience = patience
+        self.delta = delta
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_acc_threshold = 0.88  # この精度を超えたら early stopping の監視開始
+
+    def __call__(self, val_acc):
+        # 精度が閾値を超えていない間はカウントしない
+        if val_acc < self.val_acc_threshold:
+            return
+
+        if self.best_score is None:
+            self.best_score = val_acc
+        elif val_acc < self.best_score + self.delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = val_acc
+            self.counter = 0

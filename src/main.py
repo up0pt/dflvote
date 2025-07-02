@@ -18,6 +18,7 @@ from torchvision import datasets, transforms  # type: ignore[import]
 from client import Client
 from group import Group
 from utils import split_indices, filter_test, ensemble_eval
+from generate_dists import generate_dirichlet_dist
 
 # Command-line parsing
 parser = argparse.ArgumentParser()
@@ -25,9 +26,9 @@ parser.add_argument('--num_clients', type=int, default=8)
 parser.add_argument('--num_attackers', type=int, default=2)
 parser.add_argument('--attackers', type=int, nargs='*')
 parser.add_argument('--groups', type=str)
-parser.add_argument('--dists', type=str)
+parser.add_argument('--dists_groups', type=str)
 parser.add_argument('--is_targeted', type=bool, default=False)
-parser.add_argument('--dataset', choices=["MNIST", 'CIFAR10'], default="MNIST")
+parser.add_argument('--dataset', choices=["MNIST", "CIFAR10"], default="MNIST")
 parser.add_argument('--epoch', type=int, default=15)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--alpha', type=float, default=10)
@@ -87,25 +88,31 @@ if args.groups:
 else:
     GROUP_IDS = default_groups
 
+# Dirichlet splits
+# TODO: vary alpha between groups
+alpha = [args.alpha]*10
+# Setup distribution
+dist_groups = [list(range(0, args.num_clients//2)), list(range(args.num_clients//2, args.num_clients))]
+if args.dists_groups:
+    try: 
+        dist_groups = ast.literal_eval(args.dists_groups)
+        distribution = generate_dirichlet_dist(args.num_clients, dist_groups, alpha)
+
+    except: 
+        print("Invalid dists format. Using default dists.")
+        dist_groups = [list(range(0, args.num_clients//2)), list(range(args.num_clients//2, args.num_clients))]
+        distribution = generate_dirichlet_dist(args.num_clients, dist_groups, alpha)
+else:
+    distribution = generate_dirichlet_dist(args.num_clients, dist_groups, alpha)
+
 # mkdir for data store
-exp_name = f"{args.dataset}_cl{args.num_clients}_attc{args.num_attackers}_targeted{args.is_targeted}_groups{GROUP_IDS}_ep{args.epoch}_alpha{args.alpha}"
+exp_name = f"{args.dataset}_cl{args.num_clients}_attc{args.num_attackers}_datasize{args.num_train_data}_distg{dist_groups}_groups{GROUP_IDS}_ep{args.epoch}_alpha{args.alpha}"
 now = datetime.now().strftime("%Y%m%d_%H%M%S")
 exp_dir = Path("experiments") / f"{exp_name}_{now}"
 exp_dir.mkdir(parents=True, exist_ok=True)
 models_dir = exp_dir / "models"
 models_dir.mkdir(parents=True, exist_ok=True)
 print(f"Experiment directory created: {exp_dir}")
-
-
-# Dirichlet splits
-# TODO: vary alpha between groups
-alpha = [args.alpha]*10
-# Setup distribution
-default_distribution = [np.random.dirichlet(alpha)]* (args.num_clients//2) + [np.random.dirichlet(alpha)] * (args.num_clients - args.num_clients//2)
-if args.dists:
-    raise NotImplementedError('')
-else:
-    distribution = default_distribution
 
 # Initialize clients
 clients = {}
@@ -181,7 +188,7 @@ ax.set_xticklabels(labels)
 plt.setp(ax.get_xticklabels(), rotation=90, ha='center')
 ax.grid(True)
 ax.legend()
-plt.title('target backdoor attack')
+plt.title(f'backdoor attack: attackers {args.num_attackers}, alpha {args.alpha}, train data size {args.num_train_data}\nGROUP {GROUP_IDS}')
 plt.tight_layout()
 if args.is_targeted == False:
     plt.savefig(exp_dir / 'target_backdoor_attack.png')

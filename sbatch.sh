@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --output=/home/members/nakadam/dflvote/jobs/job%j.out  # where to store the output (%j is the JOBID)
 #SBATCH --error=/home/members/nakadam/dflvote/jobs/job%j.err  # where to store error messages
-#SBATCH --mem=80G
+#SBATCH --mem=160G
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=20
 #SBATCH --gres=gpu:1
 #SBATCH --nodelist=liver
 
@@ -18,20 +18,21 @@ cd $PROJECT_ROOT
 pwd
 
 # Sweep parameters
-num_clients_arr=(32)
-num_attackers_arr=(0 1 2 4 6 8)
+num_clients_arr=(16)
+num_attackers_arr=(1)
 datasets=("MNIST")
-epochs=(40)
+epochs=(400)
 alphas=(10)
 lrs=(0.001)
-datasizes=(100 500 1000 6000)
+datasizes=(1000)
+dist_arr=([[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15]])
 
 # For each num_clients value, generate groups via Python
 mapfile -t groups_arr < <(python3 - << 'EOF'
 import json
-from src.generate_division import generate_divisions
+from src.generate_division import random_dividions
 n = 16  # use num_clients value here
-groups = generate_divisions(n)
+groups = random_dividions(n)
 print(*[json.dumps(g) for g in groups], sep="\n")
 EOF
 )
@@ -39,21 +40,24 @@ EOF
 for num_clients in "${num_clients_arr[@]}"; do
   for num_attackers in "${num_attackers_arr[@]}"; do
     for groups in "${groups_arr[@]}"; do
-      for dataset in "${datasets[@]}"; do
-        for epoch in "${epochs[@]}"; do
-          for lr in "${lrs[@]}"; do
-            for alpha in "${alphas[@]}"; do
-              for datasize in "${datasizes[@]}"; do
-                echo ">>> num_clients=$num_clients, num_attackers=$num_attackers, groups=$groups, dataset=$dataset, epoch=$epoch, lr=$lr, alpha=$alpha, datasize=$datasize"
-                uv run src/main.py \
-                    --num_clients "$num_clients" \
-                    --num_attackers "$num_attackers" \
-                    --groups "$groups" \
-                    --dataset "$dataset" \
-                    --epoch "$epoch" \
-                    --lr "$lr" \
-                    --alpha "$alpha" \
-                    --num_train_data "$datasize"
+      for dist in "${dist_arr[@]}"; do
+        for dataset in "${datasets[@]}"; do
+          for epoch in "${epochs[@]}"; do
+            for lr in "${lrs[@]}"; do
+              for alpha in "${alphas[@]}"; do
+                for datasize in "${datasizes[@]}"; do
+                  echo ">>> num_clients=$num_clients, num_attackers=$num_attackers, dist_groups=$dist_arr, groups=$groups, dataset=$dataset, epoch=$epoch, lr=$lr, alpha=$alpha, datasize=$datasize"
+                  uv run src/main.py \
+                      --num_clients "$num_clients" \
+                      --num_attackers "$num_attackers" \
+                      --groups "$groups" \
+                      --dataset "$dataset" \
+                      --dists_groups "$dist" \
+                      --epoch "$epoch" \
+                      --lr "$lr" \
+                      --alpha "$alpha" \
+                      --num_train_data "$datasize"
+                done
               done
             done
           done

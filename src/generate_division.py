@@ -1,5 +1,6 @@
 import math
 from typing import List
+import random
 
 
 def generate_divisions(n: int) -> List[List[int]]:
@@ -29,6 +30,27 @@ def generate_divisions(n: int) -> List[List[int]]:
             splits.append(inter)
     return splits
 
+def random_dividions(n: int) -> list[list[int]]:
+    """
+    Generate random partitions for indices 0..n-1, where n is a power of two.
+    Partitions are ordered by descending group count: n, n/2, ..., 2, 1.
+    For each group count g = 2^k, randomly assign indices to g groups.
+    Returns a list of partitions, each a list of groups (lists of indices).
+    """
+    assert n > 0 and (n & (n - 1)) == 0, "n must be a power of two"
+    indices = list(range(n))
+    partitions = []
+    m = int(math.log2(n))
+    for k in range(m, -1, -1):
+        g = 2 ** k
+        size = n // g
+        shuffled = indices[:]
+        random.shuffle(shuffled)
+        groups = [shuffled[j * size:(j + 1) * size] for j in range(g)]
+        partitions.append(groups)
+    return partitions
+    
+
 
 if __name__ == "__main__":
-    print(generate_divisions(32))
+    print(random_dividions(16))
