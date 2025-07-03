@@ -18,12 +18,6 @@ class Group:
         self.dir_path: Path = dir_path
         self.has_mal: bool = False
         self.choose_vote_model = choose_vote_model
-        self.compute_has_mal()
-
-    def compute_has_mal(self):
-        self.has_mal = any(c.is_mal for c in self.clients)
-        for client in self.clients:
-            client.set_affected(self.has_mal)
 
     def train(
         self,
