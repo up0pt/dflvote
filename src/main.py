@@ -33,6 +33,7 @@ parser.add_argument('--epoch', type=int, default=15)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--alpha', type=float, default=10)
 parser.add_argument('--num_train_data', type=int, default=6000)
+parser.add_argument('--folder_name', type=str, default="workspace")
 args = parser.parse_args()
 
 # Reproducibility
@@ -138,7 +139,7 @@ else:
 # mkdir for data store
 exp_name = f"{args.dataset}_cl{args.num_clients}_attclimit{args.num_attackers_limit}_datasize{args.num_train_data}_distg{dist_groups[0]}_groups{GROUP_IDS[0]}_ep{args.epoch}_alpha{args.alpha}"
 now = datetime.now().strftime("%Y%m%d_%H%M%S")
-exp_dir = Path("experiments") / f"{exp_name}_{now}"
+exp_dir = Path("experiments") / args.folder_name / f"{exp_name}_{now}"
 exp_dir.mkdir(parents=True, exist_ok=True)
 models_dir = exp_dir / "models"
 models_dir.mkdir(parents=True, exist_ok=True)
@@ -172,8 +173,8 @@ for gid, grp in groups.items():
     grp.train(args.epoch, args.lr)
 
 # Select and evaluate
-test_loaders = [filter_test(test_ds, dist) for dist in distribution]
-# test_loader_avg = filter_test(test_ds, np.ones(10)/10)
+# test_loaders = [filter_test(test_ds, dist) for dist in distribution]
+test_loader_avg = filter_test(test_ds, np.ones(10)/10)
 
 nested_results_dict = defaultdict(dict)
 for target_id, target_client in clients.items():
@@ -182,7 +183,7 @@ for target_id, target_client in clients.items():
     for _, group in groups.items():
         ensemble_clients.append(group.select_model(target_id))
     # 2) 対象クライアントのテストローダーを使う
-    test_loader = test_loaders[target_id]
+    test_loader = test_loader_avg
 
     # 3) 評価
     results_various_attackers = ensemble_eval(ensemble_clients, clients, args.num_clients, test_loader, args.num_attackers_limit)
