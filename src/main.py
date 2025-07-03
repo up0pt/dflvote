@@ -188,18 +188,20 @@ for target_id, target_client in clients.items():
     results_various_attackers = ensemble_eval(ensemble_clients, clients, args.num_clients, test_loader, args.num_attackers_limit)
     # results: {n_attacker: (rob, suc, tie, fail)}
     for att_num, result in results_various_attackers.items():
-        rob, suc, tie, fail = result
+        rob, suc, tie, fail, all_affected = result
         if att_num not in nested_results_dict:
             nested_results_dict[att_num] = {
                 "rob": {},
                 "suc": {},
                 "tie": {},
-                "fail": {}
+                "fail": {},
+                "all_affected": {}
             }
         nested_results_dict[att_num]["rob"][target_id] = rob  # rob[target_id]
         nested_results_dict[att_num]["suc"][target_id] = suc  # suc[]
         nested_results_dict[att_num]["tie"][target_id] = tie  # tie[]
         nested_results_dict[att_num]["fail"][target_id] = fail  # fail[]
+        nested_results_dict[att_num]["all_affected"][target_id] = all_affected # all_affected[]
 
 
 labels = [f'Dist {i}' for i in range(1, args.num_clients+1)]
@@ -212,10 +214,12 @@ for att_num, listed_results in nested_results_dict.items():
     suc = [listed_results["suc"][i] for i in x]
     tie = [listed_results["tie"][i] for i in x]
     fai = [listed_results["fail"][i] for i in x]
+    affect = [listed_results["all_affected"][i] for i in x]
     ax.bar(x, rob, label='Robust', alpha=0.6)
     ax.bar(x, suc, bottom=rob, label='Success wo Attack', alpha=0.6)
     ax.bar(x, tie, bottom=np.array(rob) + np.array(suc), label='Tie wo Attack', alpha=0.6)
     ax.bar(x, fai, bottom=np.array(rob) + np.array(suc) + np.array(tie), label='Fail wo Attack', alpha=0.6)
+    ax.bar(x, affect, bottom=np.array(rob) + np.array(suc) + np.array(tie) + np.array(fai), label='all affected', alpha=0.6, color = 'black')
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
     # rotate labels 90° so they’re vertical
