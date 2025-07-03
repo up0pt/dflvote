@@ -45,9 +45,36 @@ def random_dividions(n: int) -> list[list[int]]:
         groups = [shuffled[j * size:(j + 1) * size] for j in range(g)]
         partitions.append(groups)
     return partitions
-    
 
+def random_div_only(n: int, m: int, rec: int) -> list[list[list[int]]]:
+    """
+    0 から n-1 までの整数を、サイズ m のグループに分割し、重複しないように rec 個の異なるランダムな組み合わせを生成する。
+
+    Args:
+        n (int): 全体の要素数（0 から n-1 まで）。
+        m (int): 1 グループあたりの要素数。
+        rec (int): 生成する組み合わせの数。
+
+    Returns:
+        List[List[List[int]]]: rec 個分の組み合わせ。各組み合わせはグループのリストで、その各要素は整数のリスト。
+
+    Raises:
+        ValueError: n が m の倍数でない場合。
+    """
+    if n <= 0 or m <= 0 or rec <= 0:
+        raise ValueError("n, m, rec はすべて正の整数で指定してください")
+    if n % m != 0:
+        raise ValueError(f"n={n} は m={m} の倍数ではありません。グループを等分できません。")
+
+    random.seed(42)
+    partitions: list[list[list[int]]] = []
+    for _ in range(rec):
+        elements = list(range(n))
+        random.shuffle(elements)
+        # グループに分割
+        groups = [elements[i : i + m] for i in range(0, n, m)]
+        partitions.append(groups)
+    return partitions
 
 if __name__ == "__main__":
-    a = generate_divisions(32)
-    print(a)
+    print(random_div_only(12, 3, 2))
