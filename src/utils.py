@@ -66,7 +66,7 @@ def ensemble_eval(
     max_attackers: int,
     num_trials: int = 10,
     device: Literal['cuda', 'cpu'] = 'cuda',
-) -> dict[int, tuple[float, float, float, float]]:
+) -> dict[int, tuple[float, float, float, float, float]]:
     # Ensure clients list is not empty
     if not ensamble_clients:
         raise AssertionError("ensamble clients must be a list and have at least one Client")
@@ -103,20 +103,23 @@ def ensemble_eval(
 
     random.seed(42) #INFO: to keep the same attackes between target clients
     for n_attacker in range(1, max_attackers+1):
-        rob_sum = succ_sum = tie_sum = fail_sum = 0.0
+        rob_sum = succ_sum = tie_sum = fail_sum = all_affected_sum = 0.0
         for trial in range(num_trials):
             attacker_ids = set(random.sample(range(num_all_clients), n_attacker))
             # Find all group_ids that have attackers
             attacker_groups = set(group_ids[aid] for aid in attacker_ids)
+            if len(attacker_groups) > n_attacker:
+                raise AssertionError('Wrong Logic')
             # All clients in these groups are affected
             affected_ids = set(idx for idx, gid in enumerate(group_ids) if gid in attacker_groups)
-
+            print(f"attackers_id: {attacker_ids}, attacker_groups: {attacker_groups}, affected_ids: {affected_ids}")
             robust = succ = tie = fail = all_affected = 0.0
             for i in range(total_samples):
                 votes = all_preds[:, i]
-                non_vals = [votes[j] for j in range(num_clients) if j not in affected_ids]
+                non_vals = [votes[j] for j in range(num_clients) if ensamble_clients[j].id not in affected_ids]
                 if not non_vals:
-                    continue  # skip if all are affected
+                    all_affected += 1
+                    continue
                 vals, cts = np.unique(non_vals, return_counts=True)
                 tied = vals[cts == cts.max()]
                 sorted_cts = np.sort(cts)[::-1]
@@ -132,17 +135,19 @@ def ensemble_eval(
                     tie += 1
                 else:
                     raise AssertionError('ensemble logic has unpredicted conditional branch')
-            total = robust + succ + tie + fail
+            total = robust + succ + tie + fail + all_affected
             if total == 0:
                 continue
             rob_sum += robust / total
             succ_sum += succ / total
             tie_sum += tie / total
             fail_sum += fail / total
+            all_affected_sum += all_affected / total
         results[n_attacker] = (
             rob_sum / num_trials,
             succ_sum / num_trials,
             tie_sum / num_trials,
-            fail_sum / num_trials
+            fail_sum / num_trials,
+            all_affected_sum / num_trials
         )
     return results
